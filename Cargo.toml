@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = ["alters-save-core", "alters-save-cli", "alters-save-web"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Iteratrix/alters-save"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[workspace.dependencies]
+flate2 = "1"
+memchr = "2"
+thiserror = "2"
+anyhow = "1"
+
+[profile.dist]
+inherits = "release"
+lto = "thin"

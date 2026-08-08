@@ -1,0 +1,14 @@
+[package]
+name = "alters-save-cli"
+description = "Development CLI for alters-save-core (corpus checks, inspection)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+alters-save-core = { path = "../alters-save-core" }
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

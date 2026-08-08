@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Alters Save Editor</title>
+<meta name="description" content="Edit The Alters save files in your browser. Resources, items - everything stays on your machine.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128190;</text></svg>">
+</head>
+<body>
+<main>
+  <header>
+    <h1>The Alters Save Editor</h1>
+    <p class="tagline">Edit resources and items in your save. Everything runs locally in your browser -
+    your save never leaves your machine.</p>
+  </header>
+
+  <section id="drop-zone" class="drop-zone" tabindex="0" role="button"
+           aria-label="Open a save file">
+    <p><strong>Drop a .sav file here</strong> or click to browse</p>
+    <p class="hint" id="fs-hint"></p>
+  </section>
+
+  <details class="paths">
+    <summary>Where are my saves?</summary>
+    <dl>
+      <dt>Windows (Steam)</dt>
+      <dd><code>%LOCALAPPDATA%\11bitstudios\TheAlters\Steam\Saved\SaveGames\&lt;SteamID&gt;\</code></dd>
+      <dt>Steam Deck / Linux (Proton)</dt>
+      <dd><code>~/.steam/steam/steamapps/compatdata/1601570/pfx/drive_c/users/steamuser/AppData/Local/11bitstudios/TheAlters/Steam/Saved/SaveGames/&lt;SteamID&gt;/</code></dd>
+    </dl>
+    <p>Edit the newest <code>*-ACT*-day-*.sav</code> file. Close the game first, and consider
+    pausing Steam Cloud sync for The Alters so it doesn't restore the old file.</p>
+  </details>
+
+  <section id="editor" class="editor" hidden>
+    <div class="file-info">
+      <span id="file-name"></span>
+      <span id="file-meta" class="muted"></span>
+      <button id="backup-btn" type="button" title="Download an untouched copy of the loaded file">Download backup</button>
+    </div>
+
+    <h2>Resources</h2>
+    <div id="resources" class="grid"></div>
+
+    <h2>Items</h2>
+    <p id="items-note" class="muted" hidden></p>
+    <div id="items" class="grid"></div>
+
+    <div id="add-item-row" class="add-item">
+      <select id="add-item-select" aria-label="Item to add"></select>
+      <input id="add-item-count" type="number" min="1" max="999" value="1" aria-label="Count">
+      <button id="add-item-btn" type="button">Add item</button>
+    </div>
+    <ul id="pending-adds" class="pending"></ul>
+
+    <div class="actions">
+      <button id="save-btn" type="button" class="primary"></button>
+      <button id="reset-btn" type="button">Reset edits</button>
+    </div>
+    <p id="status" role="status"></p>
+  </section>
+
+  <footer>
+    <p>No public documentation existed for this format; it was reverse-engineered from scratch.
+    Item injection is supported for current-version saves (archive v3); older saves support
+    resource and count edits only.</p>
+    <p><a href="https://github.com/Iteratrix/alters-save">Source on GitHub</a> ·
+    Not affiliated with 11 bit studios. Back up your saves; use at your own risk.</p>
+  </footer>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

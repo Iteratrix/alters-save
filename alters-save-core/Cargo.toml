@@ -1,0 +1,19 @@
+[package]
+name = "alters-save-core"
+description = "Parser and editor for The Alters (11 bit studios) save files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+az = "1.3.0"
+flate2 = { workspace = true }
+memchr = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+proptest = "1.11.0"
