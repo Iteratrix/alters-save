@@ -1,9 +1,11 @@
 # alters-save
 
+**Use it here: <https://iteratrix.github.io/alters-save/>**
+
 Save editor for [The Alters](https://store.steampowered.com/app/1601570/The_Alters/)
-(11 bit studios). Edit base resources and inventory items directly in your
-browser - nothing is uploaded anywhere; all parsing runs locally as
-WebAssembly.
+(11 bit studios). Edit base resources, inventory items, day/time, alter
+moods, radiation, research, and quest deadlines directly in your browser -
+nothing is uploaded anywhere; all parsing runs locally as WebAssembly.
 
 **No documentation for this save format existed anywhere public.** The
 format here was reverse-engineered from scratch against a corpus of 100+

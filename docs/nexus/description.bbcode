@@ -1,0 +1,36 @@
+[size=4][b]The Alters Save Editor[/b][/size]
+
+A free, open-source save editor that runs entirely in your browser:
+
+[size=3][b]https://iteratrix.github.io/alters-save/[/b][/size]
+
+Drop your .sav file on the page, change numbers, save. No install, no account, and [b]your save never leaves your machine[/b] - all parsing and editing happens locally via WebAssembly. On Chrome/Edge the editor writes straight back to your save file after a permission prompt; on other browsers it downloads the edited file for you to copy back.
+
+[size=3][b]What it edits[/b][/size]
+[list]
+[*][b]Resources[/b] - Metals, Rapidium, Organics, Minerals, Planetary Samples, and everything else in base storage (the load-screen preview is kept in sync)
+[*][b]Items[/b] - stack counts for anything you own, plus adding item types you don't have yet (Bridge Pylons for the Act 1 bridge, repair kits, rock drills...)
+[*][b]Day and time[/b] - set the current day, hour, and minute. Unlike runtime time cheats, a save-side edit can't crash the game mid-session
+[*][b]Alter moods[/b] - all eight emotion values (Fun, Motivation, Burden, Gloom, Frustration, Rebellion, Insecurity, Anxiety) per alter, plus clearing accumulated radiation
+[*][b]Research[/b] - mark every available technology as completed with one checkbox
+[*][b]Quest deadlines[/b] - extend individual quest deadline days (quest completion state is deliberately left alone - forcing it is how saves get corrupted)
+[/list]
+
+[size=3][b]Compatibility[/b][/size]
+[list]
+[*]Steam saves on Windows, and Steam Deck / Linux (Proton) - same file format
+[*]Current-version saves (archive v3): everything above
+[*]Saves from older game builds (archive v2): all value edits work; adding new item types and bulk research completion are disabled rather than risk corrupting them
+[*]Game Pass saves are wrapped in an Xbox container the editor doesn't unwrap yet
+[/list]
+
+[size=3][b]Safety[/b][/size]
+The editor offers a one-click backup of your original file before anything is written, and it refuses to write anything it can't fully re-parse. It was built against a corpus of 100+ real saves spanning two game versions, and every edit type is round-trip verified on every one of them in CI. Still: close the game before editing, keep the backup, and consider pausing Steam Cloud sync for The Alters so it doesn't restore the pre-edit file.
+
+The save format has no documentation anywhere public - this project reverse-engineered it from scratch. Format notes are in the source for anyone who wants to build on it:
+
+[url=https://github.com/Iteratrix/alters-save]Source on GitHub (MIT)[/url]
+
+The downloadable archive on this page is just a link card and offline instructions - the editor itself is the web page above.
+
+Not affiliated with 11 bit studios. Single-player game, your saves, your call.

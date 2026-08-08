@@ -1,0 +1,1 @@
+Browser-based save editor: resources, items, day/time, alter moods, radiation, research, quest deadlines. Nothing is uploaded - all editing runs locally in your browser. Open source.
