@@ -41,6 +41,12 @@
       <button id="backup-btn" type="button" title="Download an untouched copy of the loaded file">Download backup</button>
     </div>
 
+    <h2>Time</h2>
+    <p class="muted">The load menu labels saves by day, so an edited save keeps its old
+    label until the game re-saves. Rewinding days can desynchronize story pacing - small
+    nudges are safer than large jumps.</p>
+    <div id="time" class="grid"></div>
+
     <h2>Resources</h2>
     <div id="resources" class="grid"></div>
 
@@ -54,6 +60,25 @@
       <button id="add-item-btn" type="button">Add item</button>
     </div>
     <ul id="pending-adds" class="pending"></ul>
+
+    <h2>Alters</h2>
+    <p class="muted">Emotion values are 0-1 (higher = stronger). Radiation is the
+    accumulated dose; 0 clears it.</p>
+    <div id="alters"></div>
+
+    <h2>Research</h2>
+    <p id="research-info" class="muted"></p>
+    <label id="research-row" class="field" hidden>
+      <span>Mark all available research as completed</span>
+      <input id="research-complete" type="checkbox">
+    </label>
+
+    <details class="paths">
+      <summary>Quest deadlines (advanced)</summary>
+      <p class="muted">Absolute day numbers. Extending a deadline buys time; only touch
+      quests you recognize.</p>
+      <div id="quests" class="grid"></div>
+    </details>
 
     <div class="actions">
       <button id="save-btn" type="button" class="primary"></button>

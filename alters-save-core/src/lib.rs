@@ -25,11 +25,16 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+pub mod alters;
+mod elb;
 pub mod error;
 pub mod items;
 pub mod meta;
+pub mod quests;
+pub mod research;
 pub mod resources;
 pub mod sav;
+pub mod time;
 pub mod verify;
 
 pub use error::{Error, Result};

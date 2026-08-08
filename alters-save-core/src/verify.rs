@@ -7,7 +7,7 @@
 use crate::items::{self, ItemClass};
 use crate::resources;
 use crate::sav::SaveFile;
-use crate::{meta, Error};
+use crate::{alters, meta, quests, research, time, Error};
 
 /// Result of verifying one file.
 #[derive(Debug)]
@@ -135,12 +135,98 @@ pub fn verify(bytes: &[u8]) -> Outcome {
         return Outcome::Fail(format!("edit did not survive roundtrip: {echoed:?}"));
     }
 
-    match check_injection(&save) {
-        Ok(injection) => Outcome::Pass(format!(
-            "body {} bytes, {} resource containers, {synced} meta counts, {injection}",
-            save.body.len(),
-            containers.len()
-        )),
-        Err(reason) => Outcome::Fail(format!("item injection: {reason}")),
+    let injection = match check_injection(&save) {
+        Ok(injection) => injection,
+        Err(reason) => return Outcome::Fail(format!("item injection: {reason}")),
+    };
+    let extras = match check_new_modules(&save) {
+        Ok(extras) => extras,
+        Err(reason) => return Outcome::Fail(reason),
+    };
+    Outcome::Pass(format!(
+        "body {} bytes, {} resource containers, {synced} meta counts, {injection}, {extras}",
+        save.body.len(),
+        containers.len()
+    ))
+}
+
+fn check_new_modules(save: &SaveFile) -> Result<String, String> {
+    let version = save.archive_version();
+
+    let clock =
+        time::game_time(&save.body, version).map_err(|error| format!("time parse: {error}"))?;
+    let mut edited = save.body.clone();
+    time::set_game_time(&mut edited, &clock, clock.day + 1, clock.hour, clock.minute)
+        .map_err(|error| format!("time set: {error}"))?;
+    let reread =
+        time::game_time(&edited, version).map_err(|error| format!("time reread: {error}"))?;
+    if reread.day != clock.day + 1 || reread.hour != clock.hour || reread.minute != clock.minute {
+        return Err(format!(
+            "time edit mismatch: {}/{}/{} -> {}/{}/{}",
+            clock.day, clock.hour, clock.minute, reread.day, reread.hour, reread.minute
+        ));
     }
+
+    let roster = alters::alters(&save.body).map_err(|error| format!("alters parse: {error}"))?;
+    for alter in &roster {
+        if alter.emotions.is_empty() {
+            return Err(format!("alter {} has no emotions", alter.name));
+        }
+    }
+    if let Some(first) = roster.first() {
+        let mut edited = save.body.clone();
+        alters::set_emotion(&mut edited, first, "Anxiety", 0.0)
+            .map_err(|error| format!("emotion set: {error}"))?;
+        alters::set_radiation(&mut edited, first, 0.0)
+            .map_err(|error| format!("radiation set: {error}"))?;
+        let reread = alters::alters(&edited).map_err(|error| format!("alters reread: {error}"))?;
+        let anxious = reread
+            .iter()
+            .find(|alter| alter.name == first.name)
+            .map(|alter| {
+                alter
+                    .emotions
+                    .iter()
+                    .filter(|e| e.name == "Anxiety")
+                    .all(|e| e.value == 0.0)
+            });
+        if anxious != Some(true) {
+            return Err("emotion edit did not stick".to_owned());
+        }
+    }
+
+    let research_state = research::research(&save.body, version)
+        .map_err(|error| format!("research parse: {error}"))?;
+    let missing = research::missing(&research_state);
+    let research_note = match research::complete(&save.body, version, &missing) {
+        Ok(completed_body) => {
+            let recheck = research::research(&completed_body, version)
+                .map_err(|error| format!("research recheck: {error}"))?;
+            if research::missing(&recheck).is_empty() {
+                format!("research complete ok (+{})", missing.len())
+            } else {
+                return Err("research completion left missing techs".to_owned());
+            }
+        }
+        Err(Error::UnsupportedArchiveVersion(_)) => "research complete skipped (v2)".to_owned(),
+        Err(error) => return Err(format!("research complete: {error}")),
+    };
+
+    let deadline_list = quests::deadlines(&save.body, version);
+    if let Some(first) = deadline_list.first() {
+        let mut edited = save.body.clone();
+        quests::set_deadline(&mut edited, first, first.deadline_day + 5)
+            .map_err(|error| format!("deadline set: {error}"))?;
+        let reread = quests::deadlines(&edited, version);
+        if reread.first().map(|quest| quest.deadline_day) != Some(first.deadline_day + 5) {
+            return Err("deadline edit did not stick".to_owned());
+        }
+    }
+
+    Ok(format!(
+        "day {} ok, {} alters, {research_note}, {} deadlines",
+        clock.day,
+        roster.len(),
+        deadline_list.len()
+    ))
 }

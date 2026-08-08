@@ -19,6 +19,27 @@ el("fs-hint").textContent = hasFsAccess
 
 let state = null;
 
+function floatFieldRow(name, value, onChange) {
+  const row = document.createElement("div");
+  row.className = "field";
+  const label = document.createElement("label");
+  label.textContent = name;
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "0";
+  input.max = "1";
+  input.step = "0.05";
+  input.value = value.toFixed(3);
+  input.addEventListener("input", () => {
+    const parsed = Number.parseFloat(input.value);
+    const changed = Number.isFinite(parsed) && Math.abs(parsed - value) > 1e-6;
+    row.classList.toggle("changed", changed);
+    onChange(changed ? parsed : null);
+  });
+  row.append(label, input);
+  return row;
+}
+
 function setStatus(message, kind = "") {
   statusLine.textContent = message;
   statusLine.className = kind;
@@ -49,6 +70,80 @@ function render() {
   el("file-name").textContent = state.fileName;
   el("file-meta").textContent =
     `archive v${summary.archive_version} · ${summary.resources.length} resources · ${summary.items.length} item stacks`;
+
+  const timeDiv = el("time");
+  timeDiv.replaceChildren();
+  state.timeEdit = null;
+  if (summary.time) {
+    const clock = summary.time;
+    const current = () => state.timeEdit ?? { ...clock };
+    for (const unit of ["day", "hour", "minute"]) {
+      timeDiv.append(fieldRow(unit, clock[unit], (edited) => {
+        const next = current();
+        next[unit] = edited === null ? clock[unit] : edited;
+        state.timeEdit =
+          next.day === clock.day && next.hour === clock.hour && next.minute === clock.minute
+            ? null
+            : next;
+        updateSaveButton();
+      }));
+    }
+  }
+
+  const altersDiv = el("alters");
+  altersDiv.replaceChildren();
+  state.emotionEdits = [];
+  state.radiationEdits = [];
+  for (const alter of summary.alters) {
+    const heading = document.createElement("h3");
+    heading.textContent = alter.name.replace(/^Jan_/, "").replace(/_\d+$/, "");
+    heading.className = "muted";
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    grid.append(floatFieldRow("Radiation", alter.radiation, (edited) => {
+      state.radiationEdits = state.radiationEdits.filter((e) => e.alter !== alter.name);
+      if (edited !== null) state.radiationEdits.push({ alter: alter.name, value: edited });
+      updateSaveButton();
+    }));
+    for (const emotion of alter.emotions) {
+      grid.append(floatFieldRow(emotion.name, emotion.value, (edited) => {
+        state.emotionEdits = state.emotionEdits.filter(
+          (e) => !(e.alter === alter.name && e.emotion === emotion.name),
+        );
+        if (edited !== null) {
+          state.emotionEdits.push({ alter: alter.name, emotion: emotion.name, value: edited });
+        }
+        updateSaveButton();
+      }));
+    }
+    altersDiv.append(heading, grid);
+  }
+
+  const researchRow = el("research-row");
+  const researchInfo = el("research-info");
+  const researchBox = el("research-complete");
+  researchBox.checked = false;
+  if (summary.research) {
+    const { unlocked, discovered, missing } = summary.research;
+    researchInfo.textContent =
+      `${discovered} of ${unlocked} available technologies completed` +
+      (missing.length ? ` - ${missing.length} remaining.` : ".");
+    researchRow.hidden = !(summary.can_complete_research && missing.length > 0);
+  } else {
+    researchInfo.textContent = "Research state unavailable in this save.";
+    researchRow.hidden = true;
+  }
+
+  const questsDiv = el("quests");
+  questsDiv.replaceChildren();
+  state.questEdits = new Map();
+  summary.quests.forEach((quest, index) => {
+    questsDiv.append(fieldRow(`${quest.name}`, quest.deadline_day, (edited) => {
+      if (edited === null) state.questEdits.delete(index);
+      else state.questEdits.set(index, edited);
+      updateSaveButton();
+    }));
+  });
 
   const resourcesDiv = el("resources");
   resourcesDiv.replaceChildren();
@@ -124,7 +219,16 @@ function renderPendingAdds() {
 }
 
 function hasEdits() {
-  return state.resourceEdits.size > 0 || state.itemEdits.size > 0 || state.pendingAdds.length > 0;
+  return (
+    state.resourceEdits.size > 0 ||
+    state.itemEdits.size > 0 ||
+    state.pendingAdds.length > 0 ||
+    state.timeEdit !== null ||
+    state.emotionEdits.length > 0 ||
+    state.radiationEdits.length > 0 ||
+    state.questEdits.size > 0 ||
+    el("research-complete").checked
+  );
 }
 
 function updateSaveButton() {
@@ -148,6 +252,10 @@ async function loadFile(file, handle) {
     resourceEdits: new Map(),
     itemEdits: new Map(),
     pendingAdds: [],
+    timeEdit: null,
+    emotionEdits: [],
+    radiationEdits: [],
+    questEdits: new Map(),
   };
   setStatus("");
   render();
@@ -158,6 +266,11 @@ function buildEdits() {
     resources: [...state.resourceEdits].map(([name, amount]) => ({ name, amount })),
     item_counts: [...state.itemEdits].map(([name, count]) => ({ name, count })),
     add_items: state.pendingAdds,
+    time: state.timeEdit,
+    alter_emotions: state.emotionEdits,
+    alter_radiation: state.radiationEdits,
+    complete_research: el("research-complete").checked,
+    quest_deadlines: [...state.questEdits].map(([index, day]) => ({ index, day })),
   });
 }
 
@@ -252,6 +365,7 @@ el("add-item-btn").addEventListener("click", () => {
   renderPendingAdds();
   updateSaveButton();
 });
+el("research-complete").addEventListener("change", updateSaveButton);
 el("save-btn").addEventListener("click", () => void save());
 el("reset-btn").addEventListener("click", () => {
   void loadFile(new File([state.originalBytes], state.fileName), state.handle);

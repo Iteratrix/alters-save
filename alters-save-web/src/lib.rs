@@ -12,7 +12,7 @@ use wasm_bindgen::prelude::*;
 
 use alters_save_core::items::{self, ItemClass};
 use alters_save_core::sav::{ArchiveVersion, SaveFile};
-use alters_save_core::{meta, resources};
+use alters_save_core::{alters, meta, quests, research, resources, time};
 
 #[derive(Serialize)]
 struct ResourceSummary {
@@ -27,6 +27,39 @@ struct StackSummary {
 }
 
 #[derive(Serialize)]
+struct TimeSummary {
+    day: i32,
+    hour: i32,
+    minute: i32,
+}
+
+#[derive(Serialize)]
+struct EmotionSummary {
+    name: String,
+    value: f32,
+}
+
+#[derive(Serialize)]
+struct AlterSummary {
+    name: String,
+    radiation: f32,
+    emotions: Vec<EmotionSummary>,
+}
+
+#[derive(Serialize)]
+struct ResearchSummary {
+    unlocked: usize,
+    discovered: usize,
+    missing: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct QuestSummary {
+    name: String,
+    deadline_day: i32,
+}
+
+#[derive(Serialize)]
 struct Summary {
     archive_version: String,
     body_len: usize,
@@ -34,6 +67,11 @@ struct Summary {
     items: Vec<StackSummary>,
     items_error: Option<String>,
     can_add_items: bool,
+    time: Option<TimeSummary>,
+    alters: Vec<AlterSummary>,
+    research: Option<ResearchSummary>,
+    can_complete_research: bool,
+    quests: Vec<QuestSummary>,
 }
 
 #[derive(Deserialize, Default)]
@@ -42,6 +80,37 @@ struct Edits {
     resources: Vec<ResourceEdit>,
     item_counts: Vec<ItemCountEdit>,
     add_items: Vec<AddItemEdit>,
+    time: Option<TimeEdit>,
+    alter_emotions: Vec<EmotionEdit>,
+    alter_radiation: Vec<RadiationEdit>,
+    complete_research: bool,
+    quest_deadlines: Vec<QuestDeadlineEdit>,
+}
+
+#[derive(Deserialize)]
+struct TimeEdit {
+    day: i32,
+    hour: i32,
+    minute: i32,
+}
+
+#[derive(Deserialize)]
+struct EmotionEdit {
+    alter: String,
+    emotion: String,
+    value: f32,
+}
+
+#[derive(Deserialize)]
+struct RadiationEdit {
+    alter: String,
+    value: f32,
+}
+
+#[derive(Deserialize)]
+struct QuestDeadlineEdit {
+    index: usize,
+    day: i32,
 }
 
 #[derive(Deserialize)]
@@ -110,6 +179,49 @@ pub fn summarize(bytes: &[u8]) -> Result<String, JsValue> {
         ),
         Err(error) => (Vec::new(), Some(error.to_string())),
     };
+    let clock = time::game_time(&save.body, version)
+        .ok()
+        .map(|t| TimeSummary {
+            day: t.day,
+            hour: t.hour,
+            minute: t.minute,
+        });
+    let roster = alters::alters(&save.body)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|alter| {
+            let mut emotions: Vec<EmotionSummary> = Vec::new();
+            for emotion in &alter.emotions {
+                if !emotions.iter().any(|e| e.name == emotion.name) {
+                    emotions.push(EmotionSummary {
+                        name: emotion.name.clone(),
+                        value: emotion.value,
+                    });
+                }
+            }
+            AlterSummary {
+                name: alter.name.clone(),
+                radiation: alter.radiation.first().map_or(0.0, |&(value, _)| value),
+                emotions,
+            }
+        })
+        .collect();
+    let research_summary = research::research(&save.body, version).ok().map(|state| {
+        let missing = research::missing(&state);
+        ResearchSummary {
+            unlocked: state.unlocked.len(),
+            discovered: state.discovered.len(),
+            missing,
+        }
+    });
+    let quest_list = quests::deadlines(&save.body, version)
+        .into_iter()
+        .map(|quest| QuestSummary {
+            name: quest.name,
+            deadline_day: quest.deadline_day,
+        })
+        .collect();
+
     let summary = Summary {
         archive_version: version_label(version),
         body_len: save.body.len(),
@@ -117,6 +229,11 @@ pub fn summarize(bytes: &[u8]) -> Result<String, JsValue> {
         items,
         items_error,
         can_add_items: version == ArchiveVersion::V3,
+        time: clock,
+        alters: roster,
+        research: research_summary,
+        can_complete_research: version == ArchiveVersion::V3,
+        quests: quest_list,
     };
     serde_json::to_string(&summary).map_err(err)
 }
@@ -152,9 +269,53 @@ pub fn apply_edits(bytes: &[u8], edits_json: &str) -> Result<Vec<u8>, JsValue> {
         items::set_count(&mut save.body, stack, *count).map_err(err)?;
     }
 
+    if let Some(TimeEdit { day, hour, minute }) = &edits.time {
+        let clock = time::game_time(&save.body, version).map_err(err)?;
+        time::set_game_time(&mut save.body, &clock, *day, *hour, *minute).map_err(err)?;
+    }
+
+    if !edits.alter_emotions.is_empty() || !edits.alter_radiation.is_empty() {
+        let roster = alters::alters(&save.body).map_err(err)?;
+        for EmotionEdit {
+            alter,
+            emotion,
+            value,
+        } in &edits.alter_emotions
+        {
+            let target = roster
+                .iter()
+                .find(|candidate| &candidate.name == alter)
+                .ok_or_else(|| err(format!("unknown alter: {alter}")))?;
+            alters::set_emotion(&mut save.body, target, emotion, *value).map_err(err)?;
+        }
+        for RadiationEdit { alter, value } in &edits.alter_radiation {
+            let target = roster
+                .iter()
+                .find(|candidate| &candidate.name == alter)
+                .ok_or_else(|| err(format!("unknown alter: {alter}")))?;
+            alters::set_radiation(&mut save.body, target, *value).map_err(err)?;
+        }
+    }
+
+    if !edits.quest_deadlines.is_empty() {
+        let deadline_list = quests::deadlines(&save.body, version);
+        for QuestDeadlineEdit { index, day } in &edits.quest_deadlines {
+            let quest = deadline_list
+                .get(*index)
+                .ok_or_else(|| err(format!("quest index out of range: {index}")))?;
+            quests::set_deadline(&mut save.body, quest, *day).map_err(err)?;
+        }
+    }
+
     for AddItemEdit { name, count } in &edits.add_items {
         save.body =
             items::add_stack(&save.body, version, &ItemClass(name.clone()), *count).map_err(err)?;
+    }
+
+    if edits.complete_research {
+        let state = research::research(&save.body, version).map_err(err)?;
+        let missing = research::missing(&state);
+        save.body = research::complete(&save.body, version, &missing).map_err(err)?;
     }
 
     let containers = resources::containers(&save.body);
