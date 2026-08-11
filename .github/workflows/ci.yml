@@ -55,5 +55,6 @@ jobs:
           node-version: 22
       - run: cargo install wasm-pack
       - run: wasm-pack build alters-save-web --target web --out-dir ../web/pkg
+      - run: node web/build.mjs
       - run: wasm-pack build alters-save-web --target nodejs --out-dir ../target/wasm-node-test
       - run: node scripts/bridge-test.mjs

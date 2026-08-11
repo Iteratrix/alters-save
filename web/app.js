@@ -371,4 +371,18 @@ el("reset-btn").addEventListener("click", () => {
   void loadFile(new File([state.originalBytes], state.fileName), state.handle);
 });
 
+// Offline support. Skipped on localhost so dev never fights a stale cache;
+// persistent storage keeps the browser from evicting the cache under pressure.
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") return;
+  navigator.serviceWorker.register("./sw.js").catch((err) => {
+    console.warn("Service worker registration failed:", err);
+  });
+  if (navigator.storage?.persist) {
+    navigator.storage.persist().catch(() => {});
+  }
+}
+
 await init();
+registerServiceWorker();

@@ -34,10 +34,13 @@ jobs:
       - name: Build WASM
         run: wasm-pack build alters-save-web --target web --out-dir ../web/pkg
 
+      - name: Build web bundle (hash assets, generate service worker)
+        run: node web/build.mjs
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: web
+          path: web/out
 
   deploy:
     needs: build
