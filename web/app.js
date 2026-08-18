@@ -119,6 +119,16 @@ function render() {
     altersDiv.append(heading, grid);
   }
 
+  if (summary.dead_alters && summary.dead_alters.length > 0) {
+    const heading = document.createElement("h3");
+    heading.textContent = "Deceased";
+    heading.className = "muted";
+    const line = document.createElement("div");
+    line.className = "muted";
+    line.textContent = summary.dead_alters.join(", ");
+    altersDiv.append(heading, line);
+  }
+
   const researchRow = el("research-row");
   const researchInfo = el("research-info");
   const researchBox = el("research-complete");

@@ -15,6 +15,7 @@ use memchr::memmem;
 
 use crate::elb;
 use crate::error::{Error, Result};
+use crate::sav::ArchiveVersion;
 
 pub const EMOTION_NAMES: [&str; 8] = [
     "Fun",
@@ -187,6 +188,99 @@ pub fn alters(body: &[u8]) -> Result<Vec<Alter>> {
     }
 
     Ok(result)
+}
+
+const CHARACTER_MANAGER: &[u8] = b"/Script/P9Playable.P9CharacterManagerSubsystem";
+
+fn find_named_property(body: &[u8], start: usize, end: usize, name: &[u8]) -> Option<usize> {
+    let needle = elb::lstr(name);
+    let window = body.get(start..end)?;
+    let rel = memmem::find(window, &needle)?;
+    let tag = start + rel;
+    let (found, _) = elb::read_lstr(body, tag)?;
+    (found == name).then_some(tag)
+}
+
+fn skip_type_tree(body: &[u8], mut pos: usize, typ: &[u8], version: &ArchiveVersion) -> usize {
+    let adv = |p: usize| if *version == ArchiveVersion::V3 { p + 4 } else { p };
+    if typ == b"ArrayProperty" {
+        pos = adv(pos);
+        if let Some((inner, after)) = elb::read_lstr(body, pos) {
+            pos = after;
+            if inner == b"StructProperty" {
+                pos = adv(pos);
+                if let Some((_, after)) = elb::read_lstr(body, pos) {
+                    pos = after;
+                }
+                pos = adv(pos);
+                if let Some((_, after)) = elb::read_lstr(body, pos) {
+                    pos = after;
+                }
+            }
+        }
+    } else if typ == b"StructProperty" {
+        pos = adv(pos);
+        if let Some((_, after)) = elb::read_lstr(body, pos) {
+            pos = after;
+        }
+        pos = adv(pos);
+        if let Some((_, after)) = elb::read_lstr(body, pos) {
+            pos = after;
+        }
+    }
+    pos
+}
+
+fn property_payload(body: &[u8], tag: usize, version: ArchiveVersion) -> Option<usize> {
+    let (_name, after_name) = elb::read_lstr(body, tag)?;
+    let (typ, mut cursor) = elb::read_lstr(body, after_name)?;
+    match version {
+        ArchiveVersion::V2 => {
+            cursor += 8; // [i32 size][i32 0]
+            cursor = skip_type_tree(body, cursor, typ, &version);
+        }
+        _ => {
+            cursor = skip_type_tree(body, cursor, typ, &version);
+            cursor += 8; // [i32 0][i32 size]
+        }
+    }
+    Some(cursor + 1) // [u8 flag] then payload
+}
+
+/// Names of alters that have died, read from
+/// `P9CharacterManagerSubsystem.DeadAlters`. Returns an empty list when the
+/// record is absent or unparseable.
+pub fn dead_alters(body: &[u8], version: ArchiveVersion) -> Vec<String> {
+    let Some((payload_start, payload_size, _)) = elb::find_record(body, CHARACTER_MANAGER) else {
+        return Vec::new();
+    };
+    let payload_end = payload_start + payload_size;
+    let Some(tag) = find_named_property(body, payload_start, payload_end, b"DeadAlters") else {
+        return Vec::new();
+    };
+    let Some(payload) = property_payload(body, tag, version) else {
+        return Vec::new();
+    };
+    let Some(region) = body.get(payload..payload_end) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = Vec::new();
+    // Each dead alter's Name field is an lstr "Jan <Role>" (space-separated,
+    // unlike the alive clones' underscore instance names).
+    for start in memmem::find_iter(region, b"Jan ") {
+        let from = start;
+        let to = (start + 4 + 32).min(region.len());
+        let tail = &region[from..to];
+        let end = tail
+            .iter()
+            .position(|&b| !(b.is_ascii_alphabetic() || b == b' '))
+            .unwrap_or(tail.len());
+        let name = String::from_utf8_lossy(&tail[..end]).into_owned();
+        if !name.is_empty() {
+            names.push(name);
+        }
+    }
+    names
 }
 
 /// Set every emotion record named `emotion` on `alter` to `value`.
