@@ -123,10 +123,19 @@ function render() {
     const heading = document.createElement("h3");
     heading.textContent = "Deceased";
     heading.className = "muted";
-    const line = document.createElement("div");
-    line.className = "muted";
-    line.textContent = summary.dead_alters.join(", ");
-    altersDiv.append(heading, line);
+    const list = document.createElement("div");
+    list.className = "muted";
+    for (const dead of summary.dead_alters) {
+      const line = document.createElement("div");
+      let text = dead.name;
+      if (dead.day != null && dead.hour != null && dead.minute != null) {
+        const hm = String(dead.hour).padStart(2, "0") + ":" + String(dead.minute).padStart(2, "0");
+        text += ` — died day ${dead.day}, ${hm}`;
+      }
+      line.textContent = text;
+      list.append(line);
+    }
+    altersDiv.append(heading, list);
   }
 
   const researchRow = el("research-row");

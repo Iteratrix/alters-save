@@ -192,6 +192,16 @@ pub fn alters(body: &[u8]) -> Result<Vec<Alter>> {
 
 const CHARACTER_MANAGER: &[u8] = b"/Script/P9Playable.P9CharacterManagerSubsystem";
 
+/// A dead alter from `P9CharacterManagerSubsystem.DeadAlters`, with its death
+/// time (in-game P9DateTime) when it can be read.
+#[derive(Debug, Clone, Default)]
+pub struct DeadAlter {
+    pub name: String,
+    pub day: Option<i32>,
+    pub hour: Option<i32>,
+    pub minute: Option<i32>,
+}
+
 fn find_named_property(body: &[u8], start: usize, end: usize, name: &[u8]) -> Option<usize> {
     let needle = elb::lstr(name);
     let window = body.get(start..end)?;
@@ -250,7 +260,41 @@ fn property_payload(body: &[u8], tag: usize, version: ArchiveVersion) -> Option<
 /// Names of alters that have died, read from
 /// `P9CharacterManagerSubsystem.DeadAlters`. Returns an empty list when the
 /// record is absent or unparseable.
-pub fn dead_alters(body: &[u8], version: ArchiveVersion) -> Vec<String> {
+fn property_tag(
+    body: &[u8],
+    tag: usize,
+    version: ArchiveVersion,
+) -> Option<(Vec<u8>, Vec<u8>, usize)> {
+    let (name, after_name) = elb::read_lstr(body, tag)?;
+    let (typ, _) = elb::read_lstr(body, after_name)?;
+    let payload = property_payload(body, tag, version)?;
+    Some((name.to_vec(), typ.to_vec(), payload))
+}
+
+fn parse_datetime(body: &[u8], tag: usize, version: ArchiveVersion) -> Option<(i32, i32, i32)> {
+    let payload = property_payload(body, tag, version)?;
+    let mut day = None;
+    let mut hour = None;
+    let mut minute = None;
+    let mut pos = payload;
+    for _ in 0..8 {
+        let (name, ftype, p) = property_tag(body, pos, version)?;
+        if name == b"None" || ftype != b"IntProperty" {
+            break;
+        }
+        let value = elb::read_i32(body, p)?;
+        match name.as_slice() {
+            b"Date" => day = Some(value),
+            b"Hour" => hour = Some(value),
+            b"Minute" => minute = Some(value),
+            _ => {}
+        }
+        pos = p + 4;
+    }
+    Some((day?, hour?, minute?))
+}
+
+pub fn dead_alters(body: &[u8], version: ArchiveVersion) -> Vec<DeadAlter> {
     let Some((payload_start, payload_size, _)) = elb::find_record(body, CHARACTER_MANAGER) else {
         return Vec::new();
     };
@@ -264,9 +308,10 @@ pub fn dead_alters(body: &[u8], version: ArchiveVersion) -> Vec<String> {
     let Some(region) = body.get(payload..payload_end) else {
         return Vec::new();
     };
-    let mut names: Vec<String> = Vec::new();
     // Each dead alter's Name field is an lstr "Jan <Role>" (space-separated,
-    // unlike the alive clones' underscore instance names).
+    // unlike the alive clones' underscore instance names); its DeathTime is a
+    // P9DateTime. Collect both in order and pair them by index.
+    let mut names: Vec<String> = Vec::new();
     for start in memmem::find_iter(region, b"Jan ") {
         let from = start;
         let to = (start + 4 + 32).min(region.len());
@@ -280,7 +325,30 @@ pub fn dead_alters(body: &[u8], version: ArchiveVersion) -> Vec<String> {
             names.push(name);
         }
     }
+    let mut times: Vec<(i32, i32, i32)> = Vec::new();
+    let mut search = 0;
+    while let Some(rel) = memmem::find(&region[search..], b"DeathTime") {
+        let abs = search + rel;
+        let tag_pos = payload + abs - 4;
+        if let Some((name, typ, _)) = property_tag(body, tag_pos, version) {
+            if name == b"DeathTime" && typ == b"StructProperty" {
+                if let Some(dt) = parse_datetime(body, tag_pos, version) {
+                    times.push(dt);
+                }
+            }
+        }
+        search = abs + 1;
+    }
     names
+        .into_iter()
+        .zip(times.into_iter().chain(std::iter::repeat((0, 0, 0))))
+        .map(|(name, (day, hour, minute))| DeadAlter {
+            name,
+            day: (day > 0).then_some(day),
+            hour: (hour > 0).then_some(hour),
+            minute: (minute > 0).then_some(minute),
+        })
+        .collect()
 }
 
 /// Set every emotion record named `emotion` on `alter` to `value`.
