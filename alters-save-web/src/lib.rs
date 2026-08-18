@@ -47,6 +47,14 @@ struct AlterSummary {
 }
 
 #[derive(Serialize)]
+struct DeadAlterSummary {
+    name: String,
+    day: Option<i32>,
+    hour: Option<i32>,
+    minute: Option<i32>,
+}
+
+#[derive(Serialize)]
 struct ResearchSummary {
     unlocked: usize,
     discovered: usize,
@@ -69,6 +77,7 @@ struct Summary {
     can_add_items: bool,
     time: Option<TimeSummary>,
     alters: Vec<AlterSummary>,
+    dead_alters: Vec<DeadAlterSummary>,
     research: Option<ResearchSummary>,
     can_complete_research: bool,
     quests: Vec<QuestSummary>,
@@ -206,6 +215,15 @@ pub fn summarize(bytes: &[u8]) -> Result<String, JsValue> {
             }
         })
         .collect();
+    let dead = alters::dead_alters(&save.body, version)
+        .into_iter()
+        .map(|alter| DeadAlterSummary {
+            name: alter.name,
+            day: alter.day,
+            hour: alter.hour,
+            minute: alter.minute,
+        })
+        .collect();
     let research_summary = research::research(&save.body, version).ok().map(|state| {
         let missing = research::missing(&state);
         ResearchSummary {
@@ -231,6 +249,7 @@ pub fn summarize(bytes: &[u8]) -> Result<String, JsValue> {
         can_add_items: version == ArchiveVersion::V3,
         time: clock,
         alters: roster,
+        dead_alters: dead,
         research: research_summary,
         can_complete_research: version == ArchiveVersion::V3,
         quests: quest_list,
