@@ -193,7 +193,7 @@ pub fn alters(body: &[u8]) -> Result<Vec<Alter>> {
 const CHARACTER_MANAGER: &[u8] = b"/Script/P9Playable.P9CharacterManagerSubsystem";
 
 /// A dead alter from `P9CharacterManagerSubsystem.DeadAlters`, with its death
-/// time (in-game P9DateTime) when it can be read.
+/// time (in-game `P9DateTime`) when it can be read.
 #[derive(Debug, Clone, Default)]
 pub struct DeadAlter {
     pub name: String,
@@ -211,8 +211,14 @@ fn find_named_property(body: &[u8], start: usize, end: usize, name: &[u8]) -> Op
     (found == name).then_some(tag)
 }
 
-fn skip_type_tree(body: &[u8], mut pos: usize, typ: &[u8], version: &ArchiveVersion) -> usize {
-    let adv = |p: usize| if *version == ArchiveVersion::V3 { p + 4 } else { p };
+fn skip_type_tree(body: &[u8], mut pos: usize, typ: &[u8], version: ArchiveVersion) -> usize {
+    let adv = |p: usize| {
+        if version == ArchiveVersion::V3 {
+            p + 4
+        } else {
+            p
+        }
+    };
     if typ == b"ArrayProperty" {
         pos = adv(pos);
         if let Some((inner, after)) = elb::read_lstr(body, pos) {
@@ -244,15 +250,12 @@ fn skip_type_tree(body: &[u8], mut pos: usize, typ: &[u8], version: &ArchiveVers
 fn property_payload(body: &[u8], tag: usize, version: ArchiveVersion) -> Option<usize> {
     let (_name, after_name) = elb::read_lstr(body, tag)?;
     let (typ, mut cursor) = elb::read_lstr(body, after_name)?;
-    match version {
-        ArchiveVersion::V2 => {
-            cursor += 8; // [i32 size][i32 0]
-            cursor = skip_type_tree(body, cursor, typ, &version);
-        }
-        _ => {
-            cursor = skip_type_tree(body, cursor, typ, &version);
-            cursor += 8; // [i32 0][i32 size]
-        }
+    if version == ArchiveVersion::V2 {
+        cursor += 8; // [i32 size][i32 0]
+        cursor = skip_type_tree(body, cursor, typ, version);
+    } else {
+        cursor = skip_type_tree(body, cursor, typ, version);
+        cursor += 8; // [i32 0][i32 size]
     }
     Some(cursor + 1) // [u8 flag] then payload
 }
