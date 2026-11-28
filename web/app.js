@@ -119,6 +119,25 @@ function render() {
     altersDiv.append(heading, grid);
   }
 
+  if (summary.dead_alters && summary.dead_alters.length > 0) {
+    const heading = document.createElement("h3");
+    heading.textContent = "Deceased";
+    heading.className = "muted";
+    const list = document.createElement("div");
+    list.className = "muted";
+    for (const dead of summary.dead_alters) {
+      const line = document.createElement("div");
+      let text = dead.name;
+      if (dead.day != null && dead.hour != null && dead.minute != null) {
+        const hm = String(dead.hour).padStart(2, "0") + ":" + String(dead.minute).padStart(2, "0");
+        text += ` — died day ${dead.day}, ${hm}`;
+      }
+      line.textContent = text;
+      list.append(line);
+    }
+    altersDiv.append(heading, list);
+  }
+
   const researchRow = el("research-row");
   const researchInfo = el("research-info");
   const researchBox = el("research-complete");
